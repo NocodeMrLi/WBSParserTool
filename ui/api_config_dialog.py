@@ -1,3 +1,4 @@
+import queue
 import threading
 import sys
 import tkinter as tk
@@ -24,10 +25,14 @@ class ApiConfigDialog:
         self.window.resizable(False, False)
         self.window.transient(parent)
         self.window.grab_set()
+        self.window.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.is_closed = False
         if IS_MACOS:
             self.window.configure(bg=MAC_BACKGROUND)
 
         config = load_api_config()
+        self.is_testing = False
+        self.test_queue: queue.Queue = queue.Queue()
         self.base_url_var = tk.StringVar(value=config.base_url)
         self.api_key_var = tk.StringVar(value=config.api_key)
         self.model_var = tk.StringVar(value=config.model)
@@ -64,7 +69,7 @@ class ApiConfigDialog:
         self.test_button = ttk.Button(button_frame, text="测试连接", command=self.on_test)
         self.test_button.pack(side=tk.LEFT, padx=4)
         ttk.Button(button_frame, text="保存配置", command=self.on_save).pack(side=tk.LEFT, padx=4)
-        ttk.Button(button_frame, text="取消", command=self.window.destroy).pack(side=tk.LEFT, padx=4)
+        ttk.Button(button_frame, text="取消", command=self.on_close).pack(side=tk.LEFT, padx=4)
 
         frame.columnconfigure(1, weight=1)
 
@@ -98,7 +103,7 @@ class ApiConfigDialog:
         self.test_button = ttk.Button(button_frame, text="测试连接", command=self.on_test)
         self.test_button.pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(button_frame, text="保存配置", command=self.on_save).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(button_frame, text="取消", command=self.window.destroy).pack(side=tk.LEFT)
+        ttk.Button(button_frame, text="取消", command=self.on_close).pack(side=tk.LEFT)
 
         frame.columnconfigure(1, weight=1)
 
@@ -110,21 +115,39 @@ class ApiConfigDialog:
         )
 
     def on_test(self) -> None:
+        if self.is_testing:
+            return
         config = self.current_config()
+        self.is_testing = True
         self.test_button.configure(state=tk.DISABLED)
-        self.status_var.set("正在测试连接...")
+        self.status_var.set("正在测试连接... 最多等待 30 秒。")
 
         def worker() -> None:
             try:
                 test_connection(config)
             except Exception as exc:
-                self.window.after(0, lambda: self._test_done(False, str(exc)))
+                self.test_queue.put((False, str(exc)))
             else:
-                self.window.after(0, lambda: self._test_done(True, "API 连接可用。"))
+                self.test_queue.put((True, "API 连接可用。"))
 
         threading.Thread(target=worker, daemon=True).start()
+        self.window.after(100, self._poll_test_result)
+
+    def _poll_test_result(self) -> None:
+        if self.is_closed:
+            return
+        try:
+            ok, message = self.test_queue.get_nowait()
+        except queue.Empty:
+            if self.is_testing:
+                self.window.after(100, self._poll_test_result)
+            return
+        self._test_done(ok, message)
 
     def _test_done(self, ok: bool, message: str) -> None:
+        if self.is_closed:
+            return
+        self.is_testing = False
         self.test_button.configure(state=tk.NORMAL)
         self.status_var.set(message)
         if ok:
@@ -139,4 +162,13 @@ class ApiConfigDialog:
             return
         save_api_config(config)
         messagebox.showinfo("保存成功", "API 配置已保存到本机用户目录。", parent=self.window)
-        self.window.destroy()
+        self.on_close()
+
+    def on_close(self) -> None:
+        if self.is_closed:
+            return
+        self.is_closed = True
+        try:
+            self.window.destroy()
+        except tk.TclError:
+            pass
