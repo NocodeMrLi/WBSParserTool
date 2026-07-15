@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+.venv-mac/
+venv/
+env/
+
+# Build artifacts
+build/
+dist/
+*.spec.bak
+
+# App output and local data
+output/
+*.log
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local secrets/config
+.env
+.env.*
+config.json
+*.key
+*.pem
