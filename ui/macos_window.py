@@ -7,7 +7,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication,
@@ -408,11 +408,17 @@ class MacMainWindow:
         return name, source
 
 
+class _ApiTestBridge(QObject):
+    finished = Signal(bool, str)
+
+
 class ApiConfigDialog(QDialog):
     def __init__(self, parent: QWidget):
         super().__init__(parent)
         self.setWindowTitle("API配置")
         self.setFixedSize(600, 260)
+        self.test_bridge = _ApiTestBridge(self)
+        self.test_bridge.finished.connect(self._test_done)
         config = load_api_config()
         self.base_url_input = QLineEdit(config.base_url)
         self.api_key_input = QLineEdit(config.api_key)
@@ -464,15 +470,15 @@ class ApiConfigDialog(QDialog):
     def on_test(self) -> None:
         config = self.current_config()
         self.test_button.setEnabled(False)
-        self.status_label.setText("正在测试连接...")
+        self.status_label.setText("正在测试连接... 最多等待 30 秒。")
 
         def worker() -> None:
             try:
                 test_connection(config)
             except Exception as exc:
-                QTimer.singleShot(0, lambda: self._test_done(False, str(exc)))
+                self.test_bridge.finished.emit(False, str(exc))
             else:
-                QTimer.singleShot(0, lambda: self._test_done(True, "API 连接可用。"))
+                self.test_bridge.finished.emit(True, "API 连接可用。")
 
         threading.Thread(target=worker, daemon=True).start()
 
