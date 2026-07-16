@@ -1,0 +1,112 @@
+name: Build and publish release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v1.0.1"
+        required: true
+        default: "v1.0.1"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows installers
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build app executable
+        shell: pwsh
+        run: ./build_exe.ps1
+
+      - name: Build setup executable
+        shell: pwsh
+        run: ./build_installer.ps1
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: |
+            dist/WBSParserTool.exe
+            dist/WBSParserTool-Setup.exe
+
+  build-macos:
+    name: Build macOS DMG
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build DMG
+        run: |
+          chmod +x build_mac_app.sh build_mac_dmg.sh
+          ./build_mac_dmg.sh
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-installer
+          path: dist/WBSParserTool-mac.dmg
+
+  publish-release:
+    name: Publish GitHub release
+    runs-on: ubuntu-latest
+    needs:
+      - build-windows
+      - build-macos
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          RELEASE_NOTES=$(cat <<'NOTES'
+          WBSParserTool desktop release.
+
+          更新内容：
+          - Windows 端新增并修复“存到桌面”交付文件保存能力
+          - Windows 端 API 测试增加 30 秒超时兜底提示
+          - 版本更新为 1.0.1
+
+          下载说明：
+          - Windows 用户下载 WBSParserTool-Setup.exe
+          - macOS 用户下载 WBSParserTool-mac.dmg
+          - WBSParserTool.exe 是 Windows 免安装单文件版本
+          NOTES
+          )
+
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release edit "$TAG_NAME" --title "WBSParserTool $TAG_NAME" --notes "$RELEASE_NOTES"
+          else
+            gh release create "$TAG_NAME" --title "WBSParserTool $TAG_NAME" --notes "$RELEASE_NOTES"
+          fi
+
+          gh release upload "$TAG_NAME" release-assets/**/* --clobber
