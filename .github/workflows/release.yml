@@ -81,32 +81,30 @@ jobs:
         with:
           path: release-assets
 
+      - name: Show downloaded files
+        run: find release-assets -type f -maxdepth 3 -print
+
       - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-        run: |
-          set -euo pipefail
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+          name: WBSParserTool ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+          body: |
+            WBSParserTool desktop release.
 
-          RELEASE_NOTES=$(cat <<'NOTES'
-          WBSParserTool desktop release.
+            更新内容：
+            - Windows 端新增并修复“存到桌面”交付文件保存能力
+            - Windows 端 API 测试增加 30 秒超时兜底提示
+            - 版本更新为 1.0.1
 
-          更新内容：
-          - Windows 端新增并修复“存到桌面”交付文件保存能力
-          - Windows 端 API 测试增加 30 秒超时兜底提示
-          - 版本更新为 1.0.1
-
-          下载说明：
-          - Windows 用户下载 WBSParserTool-Setup.exe
-          - macOS 用户下载 WBSParserTool-mac.dmg
-          - WBSParserTool.exe 是 Windows 免安装单文件版本
-          NOTES
-          )
-
-          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            gh release edit "$TAG_NAME" --title "WBSParserTool $TAG_NAME" --notes "$RELEASE_NOTES"
-          else
-            gh release create "$TAG_NAME" --title "WBSParserTool $TAG_NAME" --notes "$RELEASE_NOTES"
-          fi
-
-          gh release upload "$TAG_NAME" release-assets/**/* --clobber
+            下载说明：
+            - Windows 用户下载 WBSParserTool-Setup.exe
+            - macOS 用户下载 WBSParserTool-mac.dmg
+            - WBSParserTool.exe 是 Windows 免安装单文件版本
+          files: |
+            release-assets/windows-installers/WBSParserTool.exe
+            release-assets/windows-installers/WBSParserTool-Setup.exe
+            release-assets/macos-installer/WBSParserTool-mac.dmg
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: false
