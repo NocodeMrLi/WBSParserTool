@@ -13,6 +13,9 @@ build/
 dist/
 *.spec.bak
 
+# Accidental nested project copy
+/WBSParserTool/
+
 # App output and local data
 output/
 *.log

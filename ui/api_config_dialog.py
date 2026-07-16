@@ -32,6 +32,7 @@ class ApiConfigDialog:
 
         config = load_api_config()
         self.is_testing = False
+        self.test_run_id = 0
         self.test_queue: queue.Queue = queue.Queue()
         self.base_url_var = tk.StringVar(value=config.base_url)
         self.api_key_var = tk.StringVar(value=config.api_key)
@@ -119,6 +120,8 @@ class ApiConfigDialog:
             return
         config = self.current_config()
         self.is_testing = True
+        self.test_run_id += 1
+        run_id = self.test_run_id
         self.test_button.configure(state=tk.DISABLED)
         self.status_var.set("正在测试连接... 最多等待 30 秒。")
 
@@ -126,23 +129,36 @@ class ApiConfigDialog:
             try:
                 test_connection(config)
             except Exception as exc:
-                self.test_queue.put((False, str(exc)))
+                self.test_queue.put((run_id, False, str(exc)))
             else:
-                self.test_queue.put((True, "API 连接可用。"))
+                self.test_queue.put((run_id, True, "API 连接可用。"))
 
         threading.Thread(target=worker, daemon=True).start()
         self.window.after(100, self._poll_test_result)
+        self.window.after(30000, lambda current_run=run_id: self._test_timeout(current_run))
 
     def _poll_test_result(self) -> None:
         if self.is_closed:
             return
         try:
-            ok, message = self.test_queue.get_nowait()
+            run_id, ok, message = self.test_queue.get_nowait()
         except queue.Empty:
             if self.is_testing:
                 self.window.after(100, self._poll_test_result)
             return
+        if run_id != self.test_run_id:
+            if self.is_testing:
+                self.window.after(100, self._poll_test_result)
+            return
         self._test_done(ok, message)
+
+    def _test_timeout(self, run_id: int) -> None:
+        if self.is_closed or not self.is_testing or run_id != self.test_run_id:
+            return
+        self._test_done(
+            False,
+            "测试连接超过 30 秒未完成，请检查网络、API Base URL、模型名称或 API Key 后重试。",
+        )
 
     def _test_done(self, ok: bool, message: str) -> None:
         if self.is_closed:

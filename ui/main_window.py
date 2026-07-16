@@ -33,7 +33,7 @@ class MainWindow:
         _configure_platform_style(self.root)
         _set_window_icon(self.root)
         self.root.title("WBS任务拆解工具")
-        self.root.geometry("820x560" if IS_MACOS else "740x480")
+        self.root.geometry("820x560" if IS_MACOS else "760x500")
         self.root.resizable(False, False)
 
         self.selected_path = tk.StringVar(value="")
@@ -87,7 +87,7 @@ class MainWindow:
 
         list_frame = ttk.Frame(delivery_group)
         list_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
-        self.deliverable_list = tk.Listbox(list_frame, height=5, exportselection=False)
+        self.deliverable_list = tk.Listbox(list_frame, height=6, exportselection=False)
         self.deliverable_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.deliverable_list.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -97,11 +97,11 @@ class MainWindow:
         button_frame = ttk.Frame(delivery_group)
         button_frame.pack(side=tk.RIGHT, fill=tk.Y)
         self.save_button = ttk.Button(button_frame, text="存储", command=self.on_save, state=tk.DISABLED)
-        self.save_button.pack(anchor=tk.N)
+        self.save_button.pack(anchor=tk.N, fill=tk.X)
         self.desktop_button = ttk.Button(button_frame, text="存到桌面", command=self.on_save_to_desktop, state=tk.DISABLED)
-        self.desktop_button.pack(anchor=tk.N, pady=(8, 0))
+        self.desktop_button.pack(anchor=tk.N, fill=tk.X, pady=(8, 0))
         self.clear_button = ttk.Button(button_frame, text="\u6e05\u7a7a\u72b6\u6001", command=self.on_clear_state)
-        self.clear_button.pack(anchor=tk.N, pady=(8, 0))
+        self.clear_button.pack(anchor=tk.N, fill=tk.X, pady=(8, 0))
 
         footer_frame = ttk.Frame(self.root, padding=(12, 0, 12, 10))
         footer_frame.pack(side=tk.BOTTOM, fill=tk.X)
@@ -277,6 +277,10 @@ class MainWindow:
         ]
         for name, _path in self.deliverables:
             self.deliverable_list.insert(tk.END, name)
+        if self.deliverables:
+            self.deliverable_list.selection_set(0)
+            self.deliverable_list.activate(0)
+        self._refresh_save_button()
 
     def on_save(self) -> None:
         selected = self._selected_deliverable()
@@ -307,19 +311,33 @@ class MainWindow:
         messagebox.showinfo("保存成功", f"文件已保存到：\n{target_path}", parent=self.root)
 
     def on_save_to_desktop(self) -> None:
-        selected = self._selected_deliverable()
-        if selected is None:
-            return
-        name, source = selected
-        target_path = _unique_path(_desktop_dir() / name)
-
-        try:
-            save_deliverable(source, target_path)
-        except Exception as exc:
-            messagebox.showerror("保存失败", str(exc), parent=self.root)
+        targets = self._desktop_deliverables()
+        if not targets:
+            messagebox.showwarning("暂无文件", "请先完成解析生成交付文件。", parent=self.root)
             return
 
-        messagebox.showinfo("保存成功", f"文件已保存到桌面：\n{target_path}", parent=self.root)
+        saved_paths = []
+        desktop = _desktop_dir()
+        for name, source in targets:
+            if not source.exists():
+                messagebox.showwarning("文件不存在", "交付文件不存在，请重新解析。", parent=self.root)
+                return
+            target_path = _unique_path(desktop / name)
+            try:
+                save_deliverable(source, target_path)
+            except Exception as exc:
+                messagebox.showerror("保存失败", str(exc), parent=self.root)
+                return
+            saved_paths.append(target_path)
+
+        message = "\n".join(str(path) for path in saved_paths)
+        messagebox.showinfo("保存成功", f"文件已保存到桌面：\n{message}", parent=self.root)
+
+    def _desktop_deliverables(self) -> list[tuple[str, Path]]:
+        selection = self.deliverable_list.curselection()
+        if selection:
+            return [self.deliverables[selection[0]]]
+        return list(self.deliverables)
 
     def open_api_config(self) -> None:
         ApiConfigDialog(self.root)
@@ -374,9 +392,12 @@ class MainWindow:
         self._refresh_save_button()
 
     def _refresh_save_button(self) -> None:
-        state = tk.NORMAL if self.deliverable_list.curselection() and not self.is_busy else tk.DISABLED
-        self.save_button.configure(state=state)
-        self.desktop_button.configure(state=state)
+        has_selection = bool(self.deliverable_list.curselection())
+        has_deliverables = bool(self.deliverables)
+        save_state = tk.NORMAL if has_selection and not self.is_busy else tk.DISABLED
+        desktop_state = tk.NORMAL if has_deliverables and not self.is_busy else tk.DISABLED
+        self.save_button.configure(state=save_state)
+        self.desktop_button.configure(state=desktop_state)
 
     def _set_busy(self, busy: bool) -> None:
         self.is_busy = busy
