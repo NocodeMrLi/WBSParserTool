@@ -12,6 +12,7 @@
   <img alt="input" src="https://img.shields.io/badge/input-PDF%20%7C%20DOCX%20%7C%20TXT-0EA5E9" />
   <img alt="api" src="https://img.shields.io/badge/API-OpenAI%20compatible-10B981" />
   <img alt="output" src="https://img.shields.io/badge/output-DOCX%20%7C%20XLSX-334155" />
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-22C55E" />
 </p>
 
 <p align="center">
@@ -28,7 +29,7 @@
 
 WBSParserTool 是一个面向项目需求拆解的桌面工具。你可以上传需求文档，选择本地规则解析或在线大模型解析，生成可交付的 `工作分解结构_WBS.docx` 和 `任务清单.xlsx`。
 
-当前项目暂作为私人内部工具维护。
+本项目基于 MIT 协议开源，欢迎使用、提交 Issue 或贡献代码。
 
 ## 核心能力
 
